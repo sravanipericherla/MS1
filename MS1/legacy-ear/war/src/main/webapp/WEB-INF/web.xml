@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<web-app xmlns="https://jakarta.ee/xml/ns/jakartaee"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="https://jakarta.ee/xml/ns/jakartaee https://jakarta.ee/xml/ns/jakartaee/web-app_6_0.xsd"
+         version="6.0">
+
+    <display-name>Legacy IBM Content Manager Migration Demo</display-name>
+    <description>J2EE Servlet Application demonstrating direct Db2 SQL query migration to OAuth2 Spring Boot REST APIs</description>
+
+    <!-- Context Parameters (Overridable by System properties or Environment variables) -->
+    <context-param>
+        <param-name>targetRestApiUrl</param-name>
+        <param-value>http://ms2-service:8082</param-value>
+    </context-param>
+    <context-param>
+        <param-name>oauthClientId</param-name>
+        <param-value>legacy-app</param-value>
+    </context-param>
+    <context-param>
+        <param-name>oauthClientSecret</param-name>
+        <param-value>cm-secret-123</param-value>
+    </context-param>
+    <context-param>
+        <param-name>dbUrl</param-name>
+        <param-value>jdbc:postgresql://postgres-db:5432/dockerdemo</param-value>
+    </context-param>
+    <context-param>
+        <param-name>dbUser</param-name>
+        <param-value>admin</param-value>
+    </context-param>
+    <context-param>
+        <param-name>dbPassword</param-name>
+        <param-value>admin123</param-value>
+    </context-param>
+
+    <!-- 1. Primary Servlet: Legacy Content Manager & Migrated REST Controller -->
+    <servlet>
+        <servlet-name>LegacyContentManagerServlet</servlet-name>
+        <servlet-class>com.legacy.cm.LegacyContentManagerServlet</servlet-class>
+        <init-param>
+            <param-name>defaultItemId</param-name>
+            <param-value>ICM_ITEM_001</param-value>
+        </init-param>
+        <load-on-startup>1</load-on-startup>
+    </servlet>
+
+    <servlet-mapping>
+        <servlet-name>LegacyContentManagerServlet</servlet-name>
+        <url-pattern>/legacy-cm</url-pattern>
+    </servlet-mapping>
+
+    <!-- 2. Multipart Upload Servlet -->
+    <servlet>
+        <servlet-name>LegacyDocumentUploadServlet</servlet-name>
+        <servlet-class>com.legacy.cm.LegacyDocumentUploadServlet</servlet-class>
+        <multipart-config>
+            <max-file-size>52428800</max-file-size> <!-- 50 MB -->
+            <max-request-size>52428800</max-request-size>
+            <file-size-threshold>0</file-size-threshold>
+        </multipart-config>
+    </servlet>
+
+    <servlet-mapping>
+        <servlet-name>LegacyDocumentUploadServlet</servlet-name>
+        <url-pattern>/legacy-upload</url-pattern>
+    </servlet-mapping>
+
+    <welcome-file-list>
+        <welcome-file>index.jsp</welcome-file>
+    </welcome-file-list>
+
+</web-app>

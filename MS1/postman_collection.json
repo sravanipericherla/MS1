@@ -1,0 +1,632 @@
+{
+  "info": {
+    "_postman_id": "c1f7b82e-9988-4221-a392-7489ab921cde",
+    "name": "IBM Content Manager to Spring Boot REST Migration Demo",
+    "description": "Comprehensive Postman collection covering legacy J2EE EAR migration to Spring Boot REST APIs.\nIncludes automated OAuth2 token handling, document multipart streaming, legacy Db2 SQL trace, and multi-service testing.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url_ms2",
+      "value": "http://localhost:8082",
+      "type": "string"
+    },
+    {
+      "key": "base_url_ms1",
+      "value": "http://localhost:8081",
+      "type": "string"
+    },
+    {
+      "key": "base_url_ear",
+      "value": "http://localhost:8080/legacy-cm-web",
+      "type": "string"
+    },
+    {
+      "key": "client_id",
+      "value": "legacy-app",
+      "type": "string"
+    },
+    {
+      "key": "client_secret",
+      "value": "cm-secret-123",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "demo-cm-token-12345",
+      "type": "string"
+    },
+    {
+      "key": "document_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "item_id",
+      "value": "ICM_ITEM_001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "1. OAuth2 Authentication",
+      "item": [
+        {
+          "name": "1.1 Get OAuth2 Access Token (Auto Updates Token)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Token response contains access_token\", function () {",
+                  "    pm.expect(jsonData.access_token).to.be.a('string');",
+                  "    pm.expect(jsonData.token_type).to.eql('Bearer');",
+                  "});",
+                  "",
+                  "// AUTOMATED UPDATE: Store the new token in collection and environment variables",
+                  "if (jsonData.access_token) {",
+                  "    pm.collectionVariables.set(\"access_token\", jsonData.access_token);",
+                  "    if (pm.environment) {",
+                  "        pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    }",
+                  "    console.log(\"[Postman Auto-Auth] Automatically updated access_token:\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "grant_type",
+                  "value": "client_credentials",
+                  "type": "text"
+                },
+                {
+                  "key": "client_id",
+                  "value": "{{client_id}}",
+                  "type": "text"
+                },
+                {
+                  "key": "client_secret",
+                  "value": "{{client_secret}}",
+                  "type": "text"
+                },
+                {
+                  "key": "scope",
+                  "value": "documents:read documents:write",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_ms2}}/oauth/token",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "oauth",
+                "token"
+              ]
+            },
+            "description": "Requests OAuth2 Bearer token using Client-Credentials flow. Automatically saves the returned token into {{access_token}} variable for all subsequent requests."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "2. Target REST API - MS2 (Port 8082)",
+      "item": [
+        {
+          "name": "2.1 Upload Document (Multipart Stream)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Document uploaded successfully (201 Created)\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "var jsonData = pm.response.json();",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set(\"document_id\", jsonData.id.toString());",
+                  "    console.log(\"[Postman] Auto-saved new document_id:\", jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                },
+                {
+                  "key": "itemType",
+                  "value": "INSURANCE_POLICY",
+                  "type": "text"
+                },
+                {
+                  "key": "author",
+                  "value": "POSTMAN_CLIENT",
+                  "type": "text"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url_ms2}}/api/v1/documents",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents"
+              ]
+            },
+            "description": "Uploads document binary payload via multipart/form-data. Protected by OAuth2 Bearer token."
+          },
+          "response": []
+        },
+        {
+          "name": "2.2 Stream Document Binary Content (Chunked Transfer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Content-Disposition header exists\", function () {",
+                  "    pm.expect(pm.response.headers.has(\"Content-Disposition\")).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_ms2}}/api/v1/documents/{{document_id}}/content",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{document_id}}",
+                "content"
+              ]
+            },
+            "description": "Streams binary document content chunk-by-chunk via HTTP OutputStream. Demonstrates chunked transfer over REST."
+          },
+          "response": []
+        },
+        {
+          "name": "2.3 Get Document Metadata",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_ms2}}/api/v1/documents/{{document_id}}",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents",
+                "{{document_id}}"
+              ]
+            },
+            "description": "Returns document metadata JSON without loading binary payload into memory."
+          },
+          "response": []
+        },
+        {
+          "name": "2.4 List All Documents",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url_ms2}}/api/v1/documents",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "documents"
+              ]
+            },
+            "description": "Lists all document records with download links and metadata."
+          },
+          "response": []
+        },
+        {
+          "name": "2.5 Existing MS2 Persons List",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ms2}}/ms2/persons",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "ms2",
+                "persons"
+              ]
+            },
+            "description": "Verifies existing microservice functionality remains 100% operational."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Legacy Db2 SQL Gap Analysis (Port 8082)",
+      "item": [
+        {
+          "name": "3.1 Trace Legacy Db2 SQL Query Join",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Response contains legacyDb2Query and migrationGapAnalysis\", function () {",
+                  "    pm.expect(jsonData.legacyDb2Query).to.be.a('string');",
+                  "    pm.expect(jsonData.migrationGapAnalysis).to.be.an('object');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ms2}}/api/v1/legacy/trace-sql?itemId={{item_id}}",
+              "host": [
+                "{{base_url_ms2}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "legacy",
+                "trace-sql"
+              ],
+              "query": [
+                {
+                  "key": "itemId",
+                  "value": "{{item_id}}"
+                }
+              ]
+            },
+            "description": "Executes and traces the complex SQL join across ICMSTITEMS001001, ICMSTITEMTYPEDEFS, and ICMSTCOLLNAME001001, providing field-by-field gap analysis."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Legacy J2EE EAR Application (Port 8080)",
+      "item": [
+        {
+          "name": "4.1 Legacy Direct Db2 SQL Mode (Before Migration)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Execution mode is LEGACY_DIRECT_DB2_SQL\", function () {",
+                  "    pm.expect(jsonData.executionMode).to.eql(\"LEGACY_DIRECT_DB2_SQL\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ear}}/legacy-cm?mode=sql&itemId={{item_id}}",
+              "host": [
+                "{{base_url_ear}}"
+              ],
+              "path": [
+                "legacy-cm"
+              ],
+              "query": [
+                {
+                  "key": "mode",
+                  "value": "sql"
+                },
+                {
+                  "key": "itemId",
+                  "value": "{{item_id}}"
+                }
+              ]
+            },
+            "description": "Calls LegacyContentManagerServlet using direct JDBC PreparedStatement to simulate the old Db2 SQL query."
+          },
+          "response": []
+        },
+        {
+          "name": "4.2 Legacy Download BLOB via Db2 JDBC (Before Migration)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ear}}/legacy-cm?mode=sql&download=true&itemId={{item_id}}",
+              "host": [
+                "{{base_url_ear}}"
+              ],
+              "path": [
+                "legacy-cm"
+              ],
+              "query": [
+                {
+                  "key": "mode",
+                  "value": "sql"
+                },
+                {
+                  "key": "download",
+                  "value": "true"
+                },
+                {
+                  "key": "itemId",
+                  "value": "{{item_id}}"
+                }
+              ]
+            },
+            "description": "Directly downloads binary BLOB using rs.getBinaryStream() over JDBC in the legacy servlet."
+          },
+          "response": []
+        },
+        {
+          "name": "4.3 Migrated Modern REST Mode (After Migration)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Execution mode is MIGRATED_SPRING_BOOT_REST_API\", function () {",
+                  "    pm.expect(jsonData.executionMode).to.eql(\"MIGRATED_SPRING_BOOT_REST_API\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ear}}/legacy-cm?mode=rest&docId={{document_id}}",
+              "host": [
+                "{{base_url_ear}}"
+              ],
+              "path": [
+                "legacy-cm"
+              ],
+              "query": [
+                {
+                  "key": "mode",
+                  "value": "rest"
+                },
+                {
+                  "key": "docId",
+                  "value": "{{document_id}}"
+                }
+              ]
+            },
+            "description": "Servlet obtains OAuth2 token and queries modern Spring Boot REST API instead of querying Db2."
+          },
+          "response": []
+        },
+        {
+          "name": "4.4 Stream Binary Document via Servlet from REST API (After Migration)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ear}}/legacy-cm?mode=rest&download=true&docId={{document_id}}",
+              "host": [
+                "{{base_url_ear}}"
+              ],
+              "path": [
+                "legacy-cm"
+              ],
+              "query": [
+                {
+                  "key": "mode",
+                  "value": "rest"
+                },
+                {
+                  "key": "download",
+                  "value": "true"
+                },
+                {
+                  "key": "docId",
+                  "value": "{{document_id}}"
+                }
+              ]
+            },
+            "description": "Servlet consumes InputStream from Spring Boot REST API and writes directly to HttpServletResponse OutputStream."
+          },
+          "response": []
+        },
+        {
+          "name": "4.5 View Migration Gap Analysis Matrix",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ear}}/legacy-cm?mode=gap",
+              "host": [
+                "{{base_url_ear}}"
+              ],
+              "path": [
+                "legacy-cm"
+              ],
+              "query": [
+                {
+                  "key": "mode",
+                  "value": "gap"
+                }
+              ]
+            },
+            "description": "Returns full discovery & gap analysis breakdown for the migration process."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Spring Boot Client Microservice 1 (Port 8081)",
+      "item": [
+        {
+          "name": "5.1 Greet MS1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ms1}}/ms1/greet",
+              "host": [
+                "{{base_url_ms1}}"
+              ],
+              "path": [
+                "ms1",
+                "greet"
+              ]
+            },
+            "description": "Microservice 1 health check."
+          },
+          "response": []
+        },
+        {
+          "name": "5.2 Fetch Persons from MS2 via RestTemplate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ms1}}/ms1/persons",
+              "host": [
+                "{{base_url_ms1}}"
+              ],
+              "path": [
+                "ms1",
+                "persons"
+              ]
+            },
+            "description": "MS1 issues GET call to MS2 via Spring RestTemplate."
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 Get OAuth2 Token via MS1",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ms1}}/ms1/token",
+              "host": [
+                "{{base_url_ms1}}"
+              ],
+              "path": [
+                "ms1",
+                "token"
+              ]
+            },
+            "description": "MS1 obtains OAuth2 token from MS2 using RestTemplate client credentials."
+          },
+          "response": []
+        },
+        {
+          "name": "5.4 Stream Document from MS2 via MS1 RestTemplate",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url_ms1}}/ms1/documents/{{document_id}}/stream",
+              "host": [
+                "{{base_url_ms1}}"
+              ],
+              "path": [
+                "ms1",
+                "documents",
+                "{{document_id}}",
+                "stream"
+              ]
+            },
+            "description": "Demonstrates RestTemplate streaming binary payload from MS2 directly to client OutputStream without memory overhead."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}

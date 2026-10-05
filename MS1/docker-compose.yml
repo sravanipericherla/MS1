@@ -1,0 +1,78 @@
+services:
+  postgres-db:
+    image: postgres:16
+    container_name: postgres-container
+    environment:
+      POSTGRES_DB: dockerdemo
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    volumes:
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - singtel-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d dockerdemo"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ms2-service:
+    build:
+      context: ./MS2
+      dockerfile: Dockerfile
+    container_name: ms2-container
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+    networks:
+      - singtel-network
+
+  ms1-service:
+    build:
+      context: ./MS1
+      dockerfile: Dockerfile
+    container_name: ms1-container
+    environment:
+      - SPRING_PROFILES_ACTIVE=docker
+    ports:
+      - "8081:8081"
+    depends_on:
+      - ms2-service
+    networks:
+      - singtel-network
+
+  legacy-ear-service:
+    build:
+      context: ./legacy-ear
+      dockerfile: Dockerfile
+    container_name: legacy-ear-container
+    environment:
+      - TARGET_REST_API_URL=http://ms2-service:8082
+      - OAUTH_CLIENT_ID=legacy-app
+      - OAUTH_CLIENT_SECRET=cm-secret-123
+      - DB_URL=jdbc:postgresql://postgres-db:5432/dockerdemo
+      - DB_USER=admin
+      - DB_PASSWORD=admin123
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      ms2-service:
+        condition: service_started
+    networks:
+      - singtel-network
+
+volumes:
+  postgres_data:
+
+networks:
+  singtel-network:
+    driver: bridge
